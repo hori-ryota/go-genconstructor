@@ -155,11 +155,13 @@ func Run(targetDir string, newWriter func(pkg *ast.Package) io.Writer, opts ...O
 						}
 					}
 
-					if err := template.Must(template.New("constructor").Parse(`
+					if err := template.Must(template.New("constructor").Funcs(map[string]interface{}{
+						"ToLowerCamel": toLowerCamel,
+					}).Parse(`
 						func New{{ .StructName }}(
 							{{- range .Fields }}
 								{{- if not .ConstValue }}
-									{{ .Name }} {{ .Type }},
+									{{ ToLowerCamel .Name }} {{ .Type }},
 								{{- end }}
 							{{- end }}
 						) {{ .StructName }} {
@@ -168,7 +170,7 @@ func Run(targetDir string, newWriter func(pkg *ast.Package) io.Writer, opts ...O
 									{{- if .ConstValue }}
 										{{ .Name }}: {{ .ConstValue }},
 									{{- else }}
-										{{ .Name }}: {{ .Name }},
+										{{ .Name }}: {{ ToLowerCamel .Name }},
 									{{- end }}
 								{{- end }}
 							}
@@ -231,6 +233,64 @@ type FieldInfo struct {
 	Type       string
 	Name       string
 	ConstValue string
+}
+
+func toLowerCamel(s string) string {
+	if s == "" {
+		return s
+	}
+	firstNotUpperIndex := strings.IndexFunc(s, func(c rune) bool {
+		return !unicode.IsUpper(c)
+	})
+	if firstNotUpperIndex == -1 {
+		firstNotUpperIndex = len(s)
+	}
+	if commonInitialisms[s[:firstNotUpperIndex]] {
+		return strings.ToLower(s[:firstNotUpperIndex]) + s[firstNotUpperIndex:]
+	}
+	return strings.ToLower(s[:1]) + s[1:]
+}
+
+// from https://github.com/golang/lint
+var commonInitialisms = map[string]bool{
+	"acl":   true,
+	"api":   true,
+	"ascii": true,
+	"cpu":   true,
+	"css":   true,
+	"dns":   true,
+	"eof":   true,
+	"guid":  true,
+	"html":  true,
+	"http":  true,
+	"https": true,
+	"id":    true,
+	"ip":    true,
+	"json":  true,
+	"lhs":   true,
+	"qps":   true,
+	"ram":   true,
+	"rhs":   true,
+	"rpc":   true,
+	"sla":   true,
+	"smtp":  true,
+	"sql":   true,
+	"ssh":   true,
+	"tcp":   true,
+	"tls":   true,
+	"ttl":   true,
+	"udp":   true,
+	"ui":    true,
+	"uid":   true,
+	"uuid":  true,
+	"uri":   true,
+	"url":   true,
+	"utf8":  true,
+	"vm":    true,
+	"xml":   true,
+	"xmpp":  true,
+	"xsrf":  true,
+	"xss":   true,
 }
 
 func fmtImports(pkgs []*ast.ImportSpec, fset *token.FileSet) string {
