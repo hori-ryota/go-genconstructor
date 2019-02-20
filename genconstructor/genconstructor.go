@@ -1,3 +1,19 @@
+/*
+genconstructor is constructor generator for Go.
+
+```go
+    //genconstructor
+    type Foo struct {
+        key string `required:"[constValue]"`
+    }
+```
+
+with `go generate` command
+
+```go
+    //go:generate go-genconstructor
+```
+*/
 package genconstructor
 
 import (
