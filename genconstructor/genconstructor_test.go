@@ -44,4 +44,12 @@ func ExampleRun() {
 	// 		createdAt: time.Now(),
 	// 	}
 	// }
+	//
+	// func NewPersonService(
+	// 	id string,
+	// ) *PersonService {
+	// 	return &PersonService{
+	// 		id: id,
+	// 	}
+	// }
 }

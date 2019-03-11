@@ -5,7 +5,7 @@ Constructor generator for Go.
 ## Usage
 
 ```go
-    //genconstructor
+    //genconstructor [-p]
     type Foo struct {
         key string `required:"[constValue]"`
     }

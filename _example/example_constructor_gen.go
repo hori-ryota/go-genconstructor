@@ -16,3 +16,11 @@ func NewPerson(
 		createdAt: time.Now(),
 	}
 }
+
+func NewPersonService(
+	id string,
+) *PersonService {
+	return &PersonService{
+		id: id,
+	}
+}

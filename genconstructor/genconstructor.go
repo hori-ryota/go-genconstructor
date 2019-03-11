@@ -37,6 +37,7 @@ import (
 
 const (
 	commentMarker = "//genconstructor"
+	pointerOpts   = "-p"
 )
 
 type Option func(o *option)
@@ -105,9 +106,16 @@ func Run(targetDir string, newWriter func(pkg *ast.Package) io.Writer, opts ...O
 					continue
 				}
 				hasMarker := false
+				hasPointerOpts := false
 				for _, comment := range decl.Doc.List {
-					if strings.TrimSpace(comment.Text) == commentMarker {
+					if strings.HasPrefix(strings.TrimSpace(comment.Text), commentMarker) {
 						hasMarker = true
+						for _, s := range strings.Fields(comment.Text) {
+							if s == pointerOpts {
+								hasPointerOpts = true
+								break
+							}
+						}
 						break
 					}
 				}
@@ -180,8 +188,8 @@ func Run(targetDir string, newWriter func(pkg *ast.Package) io.Writer, opts ...O
 									{{ ToLowerCamel .Name }} {{ .Type }},
 								{{- end }}
 							{{- end }}
-						) {{ .StructName }} {
-							return {{ .StructName }}{
+						) {{ if .Pointer }}*{{ end }}{{ .StructName }} {
+							return {{ if .Pointer }}&{{ end }}{{ .StructName }}{
 								{{- range .Fields }}
 									{{- if .ConstValue }}
 										{{ .Name }}: {{ .ConstValue }},
@@ -194,6 +202,7 @@ func Run(targetDir string, newWriter func(pkg *ast.Package) io.Writer, opts ...O
 					`)).Execute(body, tmplParam{
 						StructName: spec.Name.Name,
 						Fields:     fieldInfos,
+						Pointer:    hasPointerOpts,
 					}); err != nil {
 						panic(err)
 					}
@@ -243,6 +252,7 @@ func Run(targetDir string, newWriter func(pkg *ast.Package) io.Writer, opts ...O
 type tmplParam struct {
 	StructName string
 	Fields     []FieldInfo
+	Pointer    bool
 }
 
 type FieldInfo struct {

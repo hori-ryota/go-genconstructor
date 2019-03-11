@@ -11,3 +11,8 @@ type Person struct {
 	tags      []string
 	createdAt time.Time `required:"time.Now()"`
 }
+
+//genconstructor -p
+type PersonService struct {
+	id string `required:""`
+}
