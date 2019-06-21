@@ -130,73 +130,46 @@ func Run(targetDir string, newWriter func(pkg *ast.Package) io.Writer, opts ...O
 						continue
 					}
 
-					fieldInfos := make([]FieldInfo, 0, len(structType.Fields.List))
-					for _, field := range structType.Fields.List {
-						if field.Tag == nil {
-							continue
-						}
-						tag := reflect.StructTag(strings.Trim(field.Tag.Value, "`"))
-
-						constValue, hasTag := tag.Lookup("required")
-						if !hasTag {
-							continue
-						}
-
-						b := new(bytes.Buffer)
-						err := printer.Fprint(b, fset, field.Type)
-						if err != nil {
-							return err
-						}
-						fieldTypeText := b.String()
-
-						fieldInfos = append(fieldInfos, FieldInfo{
-							Type:       fieldTypeText,
-							Name:       field.Names[0].Name,
-							ConstValue: constValue,
-						})
-
-						// resolve imports
-						for _, s := range strings.FieldsFunc(fieldTypeText, func(c rune) bool {
-							return !unicode.IsLetter(c) && c != '.'
-						}) {
-							ss := strings.SplitN(s, ".", 2)
-							if len(ss) == 2 {
-								for i := range file.Imports {
-									if file.Imports[i].Name == nil {
-										if path.Base(strings.Trim(file.Imports[i].Path.Value, `"`)) != ss[0] {
-											continue
-										}
-										importPackages = append(importPackages, file.Imports[i])
-										break
-									}
-									if file.Imports[i].Name.Name != ss[0] {
-										continue
-									}
-									importPackages = append(importPackages, file.Imports[i])
-									break
-								}
-							}
-						}
+					fieldInfos, ips, err := parseStruct(fset, file, structType)
+					if err != nil {
+						return err
 					}
+					importPackages = append(importPackages, ips...)
 
 					if err := template.Must(template.New("constructor").Funcs(map[string]interface{}{
 						"ToLowerCamel": toLowerCamel,
 					}).Parse(`
-						func New{{ .StructName }}(
-							{{- range .Fields }}
+						{{ define "args" }}
+							{{- range . }}
 								{{- if not .ConstValue }}
-									{{ ToLowerCamel .Name }} {{ .Type }},
-								{{- end }}
-							{{- end }}
-						) {{ if .Pointer }}*{{ end }}{{ .StructName }} {
-							return {{ if .Pointer }}&{{ end }}{{ .StructName }}{
-								{{- range .Fields }}
-									{{- if .ConstValue }}
-										{{ .Name }}: {{ .ConstValue }},
+									{{- if not .EmbeddedFields }}
+										{{ ToLowerCamel .Name }} {{ .Type }},
 									{{- else }}
-										{{ .Name }}: {{ ToLowerCamel .Name }},
+										{{- template "args" .EmbeddedFields }}
 									{{- end }}
 								{{- end }}
+							{{- end }}
+						{{- end }}
+
+						{{ define "substitution" }}
+							{{- range . }}
+								{{- if .ConstValue }}
+									{{ .Name }}: {{ .ConstValue }},
+								{{- else if .EmbeddedFields }}
+								  {{ .Name }}: {{ .Type }}{
+										{{- template "substitution" .EmbeddedFields }}
+									},
+								{{- else }}
+									{{ .Name }}: {{ ToLowerCamel .Name }},
+								{{- end }}
+							{{- end }}
+						{{- end }}
+
+						func New{{ .StructName }}(
+							{{- template "args" .Fields }}
+						) {{ if .Pointer }}*{{ end }}{{ .StructName }} {
+							return {{ if .Pointer }}&{{ end }}{{ .StructName }}{
+								{{- template "substitution" .Fields }}
 							}
 						}
 					`)).Execute(body, tmplParam{
@@ -256,9 +229,10 @@ type tmplParam struct {
 }
 
 type FieldInfo struct {
-	Type       string
-	Name       string
-	ConstValue string
+	Type           string
+	Name           string
+	ConstValue     string
+	EmbeddedFields []FieldInfo
 }
 
 func toLowerCamel(s string) string {
@@ -361,4 +335,90 @@ func fmtImports(pkgs []*ast.ImportSpec, fset *token.FileSet) string {
 		)`,
 		b.String(),
 	)
+}
+
+func parseStruct(fset *token.FileSet, file *ast.File, structType *ast.StructType) (fieldInfos []FieldInfo, importPackages []*ast.ImportSpec, err error) {
+	fieldInfos = make([]FieldInfo, 0, len(structType.Fields.List))
+	importPackages = make([]*ast.ImportSpec, 0, 10)
+
+	for _, field := range structType.Fields.List {
+		if field.Names == nil {
+			// embedded
+			structType, ok := field.Type.(*ast.Ident).Obj.Decl.(*ast.TypeSpec).Type.(*ast.StructType)
+			if !ok {
+				continue
+			}
+			fis, ips, err := parseStruct(fset, file, structType)
+			if err != nil {
+				return nil, nil, err
+			}
+
+			fieldTypeText, err := fmtFieldTypeText(fset, field.Type)
+			if err != nil {
+				return nil, nil, err
+			}
+
+			fieldInfos = append(fieldInfos, FieldInfo{
+				Type:           fieldTypeText,
+				Name:           field.Type.(*ast.Ident).Name,
+				EmbeddedFields: fis,
+			})
+			importPackages = append(importPackages, ips...)
+			continue
+		}
+
+		if field.Tag == nil {
+			continue
+		}
+		tag := reflect.StructTag(strings.Trim(field.Tag.Value, "`"))
+
+		constValue, hasTag := tag.Lookup("required")
+		if !hasTag {
+			continue
+		}
+
+		fieldTypeText, err := fmtFieldTypeText(fset, field.Type)
+		if err != nil {
+			return nil, nil, err
+		}
+
+		fieldInfos = append(fieldInfos, FieldInfo{
+			Type:       fieldTypeText,
+			Name:       field.Names[0].Name,
+			ConstValue: constValue,
+		})
+
+		// resolve imports
+		for _, s := range strings.FieldsFunc(fieldTypeText, func(c rune) bool {
+			return !unicode.IsLetter(c) && c != '.'
+		}) {
+			ss := strings.SplitN(s, ".", 2)
+			if len(ss) == 2 {
+				for i := range file.Imports {
+					if file.Imports[i].Name == nil {
+						if path.Base(strings.Trim(file.Imports[i].Path.Value, `"`)) != ss[0] {
+							continue
+						}
+						importPackages = append(importPackages, file.Imports[i])
+						break
+					}
+					if file.Imports[i].Name.Name != ss[0] {
+						continue
+					}
+					importPackages = append(importPackages, file.Imports[i])
+					break
+				}
+			}
+		}
+	}
+	return fieldInfos, importPackages, nil
+}
+
+func fmtFieldTypeText(fset *token.FileSet, fieldType ast.Expr) (string, error) {
+	b := new(bytes.Buffer)
+	err := printer.Fprint(b, fset, fieldType)
+	if err != nil {
+		return "", err
+	}
+	return b.String(), nil
 }
