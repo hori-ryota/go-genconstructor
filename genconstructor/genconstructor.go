@@ -149,9 +149,17 @@ func Run(targetDir string, newWriter func(pkg *ast.Package) io.Writer, opts ...O
 						}
 						fieldTypeText := b.String()
 
+						var fieldName string
+						if field.Names != nil {
+							fieldName = field.Names[0].Name
+						} else {
+							// embedding
+							fieldName = field.Type.(*ast.Ident).Name
+						}
+
 						fieldInfos = append(fieldInfos, FieldInfo{
 							Type:       fieldTypeText,
-							Name:       field.Names[0].Name,
+							Name:       fieldName,
 							ConstValue: constValue,
 						})
 
