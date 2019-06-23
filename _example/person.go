@@ -16,9 +16,3 @@ type Person struct {
 type PersonService struct {
 	id string `required:""`
 }
-
-//genconstructor
-type ArmedWarrior struct {
-	Person
-	armament string `required:"" getter:""`
-}
