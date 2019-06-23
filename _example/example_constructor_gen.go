@@ -24,18 +24,3 @@ func NewPersonService(
 		id: id,
 	}
 }
-
-func NewArmedWarrior(
-	id string,
-	name string,
-	armament string,
-) ArmedWarrior {
-	return ArmedWarrior{
-		Person: Person{
-			id:        id,
-			name:      name,
-			createdAt: time.Now(),
-		},
-		armament: armament,
-	}
-}
