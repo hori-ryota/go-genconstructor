@@ -164,26 +164,27 @@ func Run(targetDir string, newWriter func(pkg *ast.Package) io.Writer, opts ...O
 						})
 
 						// resolve imports
-						for _, s := range strings.FieldsFunc(fieldTypeText, func(c rune) bool {
-							return !unicode.IsLetter(c) && c != '.'
-						}) {
-							ss := strings.SplitN(s, ".", 2)
-							if len(ss) == 2 {
-								for i := range file.Imports {
-									if file.Imports[i].Name == nil {
-										if path.Base(strings.Trim(file.Imports[i].Path.Value, `"`)) != ss[0] {
-											continue
-										}
-										importPackages = append(importPackages, file.Imports[i])
-										break
-									}
-									if file.Imports[i].Name.Name != ss[0] {
-										continue
-									}
-									importPackages = append(importPackages, file.Imports[i])
-									break
+						s := fieldTypeText
+						if constValue != "" {
+							s = constValue
+						}
+						ss := strings.SplitN(strings.TrimLeft(s, "*&"), ".", 2)
+						if len(ss) != 2 {
+							continue
+						}
+						for i := range file.Imports {
+							if file.Imports[i].Name == nil {
+								if path.Base(strings.Trim(file.Imports[i].Path.Value, `"`)) != ss[0] {
+									continue
 								}
+								importPackages = append(importPackages, file.Imports[i])
+								break
 							}
+							if file.Imports[i].Name.Name != ss[0] {
+								continue
+							}
+							importPackages = append(importPackages, file.Imports[i])
+							break
 						}
 					}
 
