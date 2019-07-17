@@ -16,7 +16,7 @@ func main() {
 	if err := Main(os.Args); err != nil {
 		log.Print(err)
 		fmt.Printf(`
-Useage: %s [targetDir]
+Usage: %s [targetDir]
 `, os.Args[0])
 	}
 }
